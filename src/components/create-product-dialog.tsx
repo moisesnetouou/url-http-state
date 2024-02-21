@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { z } from "zod";
 import { Button } from "./ui/button";
 import { DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
@@ -5,6 +6,8 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createProduct } from "@/data/products";
 
 
 const createProductSchema = z.object({
@@ -14,13 +17,54 @@ const createProductSchema = z.object({
 
 type CreateProductSchema = z.infer<typeof createProductSchema>
 
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+}
+
+type SetProductsData = (prevProducts: Product[] | undefined, variables: { name: string; price: number }) => Product[];
+
 export function CreateProductDialog(){
+  const queryClient = useQueryClient()
+
   const { register, handleSubmit } = useForm<CreateProductSchema>({
-    resolver: zodResolver(createProductSchema)
+    resolver: zodResolver(createProductSchema),
   })
 
-  function handleCreateProduct(data: CreateProductSchema){
-    console.log(data)
+  const { mutateAsync: createProductFn } = useMutation({
+    mutationFn: createProduct,
+    onSuccess(_, variables) {
+
+      const cached: Product[] | undefined = queryClient.getQueryData<Product[]>(["products"]);
+  
+      console.log(cached);
+  
+      const setProductsData: SetProductsData = (prevProducts) => {
+        if (!prevProducts) return [];
+  
+        return [...prevProducts, {
+          id: crypto.randomUUID(),
+          name: variables.name,
+          price: variables.price
+        }];
+      };
+  
+      queryClient.setQueryData(["products"], setProductsData);
+    }
+  });
+
+  async function handleCreateProduct(data: CreateProductSchema){
+    try {
+      await createProductFn({
+        name: data.name,
+        price: data.price
+      })
+
+      alert("Produto cadastrado com sucesso!")
+    } catch (err) {
+      alert("Erro ao cadastrar produto")
+    }
   }
 
   return(
